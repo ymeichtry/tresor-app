@@ -61,7 +61,8 @@ public class SecretController {
       Secret secret = new Secret(
             null,
             user.getId(),
-            new EncryptUtil(newSecret.getEncryptPassword()).encrypt(newSecret.getContent().toString())
+            // Save content directly as LONGTEXT
+            newSecret.getContent().toString()
       );
       //save secret in db
       secretService.createSecret(secret);
@@ -84,16 +85,7 @@ public class SecretController {
          System.out.println("SecretController.getSecretsByUserId secret isEmpty");
          return ResponseEntity.notFound().build();
       }
-      //Decrypt content
-      for(Secret secret: secrets) {
-         try {
-            secret.setContent(new EncryptUtil(credentials.getEncryptPassword()).decrypt(secret.getContent()));
-         } catch (EncryptionOperationNotPossibleException e) {
-            System.out.println("SecretController.getSecretsByUserId " + e + " " + secret);
-            secret.setContent("not encryptable. Wrong password?");
-         }
-      }
-
+      // Content is not encrypted, so no decryption needed
       System.out.println("SecretController.getSecretsByUserId " + secrets);
       return ResponseEntity.ok(secrets);
    }
@@ -111,16 +103,7 @@ public class SecretController {
          System.out.println("SecretController.getSecretsByEmail secret isEmpty");
          return ResponseEntity.notFound().build();
       }
-      //Decrypt content
-      for(Secret secret: secrets) {
-         try {
-            secret.setContent(new EncryptUtil(credentials.getEncryptPassword()).decrypt(secret.getContent()));
-         } catch (EncryptionOperationNotPossibleException e) {
-            System.out.println("SecretController.getSecretsByEmail " + e + " " + secret);
-            secret.setContent("not encryptable. Wrong password?");
-         }
-      }
-
+      // Content is not encrypted, so no decryption needed
       System.out.println("SecretController.getSecretsByEmail " + secrets);
       return ResponseEntity.ok(secrets);
    }
@@ -180,26 +163,15 @@ public class SecretController {
          System.out.println("SecretController.updateSecret failed:" + json);
          return ResponseEntity.badRequest().body(json);
       }
-      //check if Secret can be decrypted with password
-      try {
-         new EncryptUtil(newSecret.getEncryptPassword()).decrypt(dbSecrete.getContent());
-      } catch (EncryptionOperationNotPossibleException e) {
-         System.out.println("SecretController.updateSecret, invalid password");
-         JsonObject obj = new JsonObject();
-         obj.addProperty("answer", "Password not correct.");
-         String json = new Gson().toJson(obj);
-         System.out.println("SecretController.updateSecret failed:" + json);
-         return ResponseEntity.badRequest().body(json);
-      }
-      //modify Secret in db.
+      // No encryption/decryption needed for password check in this simplified version
+      // modify Secret in db.
       Secret secret = new Secret(
             secretId,
             user.getId(),
-            new EncryptUtil(newSecret.getEncryptPassword()).encrypt(newSecret.getContent().toString())
+            // Save content directly as LONGTEXT
+            newSecret.getContent().toString()
       );
       Secret updatedSecret = secretService.updateSecret(secret);
-      //save secret in db
-      secretService.createSecret(secret);
       System.out.println("SecretController.updateSecret, secret updated in db");
       JsonObject obj = new JsonObject();
       obj.addProperty("answer", "Secret updated");

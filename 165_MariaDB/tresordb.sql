@@ -37,7 +37,7 @@ INSERT INTO `user` (`id`, `first_name`, `last_name`, `email`, `password`) VALUES
 CREATE TABLE secret (
     id int NOT NULL AUTO_INCREMENT,
     user_id int NOT NULL,
-    content json NOT NULL,
+    content LONGTEXT NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -48,4 +48,4 @@ CREATE TABLE secret (
 INSERT INTO `secret` (`id`, `user_id`, `content`) VALUES
     (1, 1, '{"kindid":1,"kind":"credential","userName":"muster","password":"1234","url":"www.bbw.ch"}'),
     (2, 1, '{"kindid":2,"kind":"creditcard","cardtype":"Visa","cardnumber":"4242 4242 4242 4241","expiration":"12/27","cvv":"789"}'),
-    (3, 1, '{"kindid":3,"kind":"note","title":"Eragon","content":"Und Eragon ging auf den Drachen zu."}');
+    (3, 1, '{"kindid":3,"kind":"note","title":"Eragon","content":"Und Eragon ging auf dem Drachen zu."}');
