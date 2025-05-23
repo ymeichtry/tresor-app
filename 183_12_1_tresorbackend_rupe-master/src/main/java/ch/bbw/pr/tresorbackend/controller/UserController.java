@@ -17,10 +17,12 @@ import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -38,6 +40,9 @@ public class UserController {
    private PasswordEncryptionService passwordService;
    private final ConfigProperties configProperties;
    private static final Logger logger = LoggerFactory.getLogger(UserController.class);
+   @Value("${RECAPTCHA_SECRET_KEY}") // Read from environment variable
+   private String recaptchaSecretKey;
+   private final String RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 
    @Autowired
    public UserController(ConfigProperties configProperties, UserService userService,
@@ -55,11 +60,6 @@ public class UserController {
    @CrossOrigin(origins = "${CROSS_ORIGIN}")
    @PostMapping
    public ResponseEntity<String> createUser(@Valid @RequestBody RegisterUser registerUser, BindingResult bindingResult) {
-      //captcha
-      //todo ergänzen
-
-      System.out.println("UserController.createUser: captcha passed.");
-
       //input validation
       if (bindingResult.hasErrors()) {
          List<String> errors = bindingResult.getFieldErrors().stream()
@@ -77,6 +77,17 @@ public class UserController {
          return ResponseEntity.badRequest().body(json);
       }
       System.out.println("UserController.createUser: input validation passed");
+
+      // reCAPTCHA verification
+      boolean isCaptchaValid = verifyRecaptcha(registerUser.getRecaptchaToken());
+      if (!isCaptchaValid) {
+          JsonObject obj = new JsonObject();
+          obj.addProperty("message", "reCAPTCHA verification failed.");
+          String json = new Gson().toJson(obj);
+          System.out.println("UserController.createUser, reCAPTCHA verification failed: " + json);
+          return ResponseEntity.badRequest().body(json);
+      }
+      System.out.println("UserController.createUser: captcha passed.");
 
       //password validation
       //todo ergänzen
@@ -208,5 +219,47 @@ public class UserController {
       logger.info("User {} successfully logged in", loginUser.getEmail());
       return ResponseEntity.ok(new LoginResponse("Login successful", user.getId()));
    }
+
+    private boolean verifyRecaptcha(String recaptchaToken) {
+        if (recaptchaToken == null || recaptchaToken.isEmpty()) {
+            return false;
+        }
+
+        RestTemplate restTemplate = new RestTemplate();
+        String verificationUrl = RECAPTCHA_VERIFY_URL + "?secret=" + recaptchaSecretKey + "&response=" + recaptchaToken;
+
+        try {
+            // The response from Google is a JSON object
+            RecaptchaResponse recaptchaResponse = restTemplate.postForObject(
+                    verificationUrl, null, RecaptchaResponse.class);
+
+            return recaptchaResponse != null && recaptchaResponse.isSuccess();
+        } catch (Exception e) {
+            logger.error("reCAPTCHA verification error: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // Helper class to parse the reCAPTCHA verification response
+    private static class RecaptchaResponse {
+        private boolean success;
+        private List<String> errorCodes;
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public void setSuccess(boolean success) {
+            this.success = success;
+        }
+
+        public List<String> getErrorCodes() {
+            return errorCodes;
+        }
+
+        public void setErrorCodes(List<String> errorCodes) {
+            this.errorCodes = errorCodes;
+        }
+    }
 
 }

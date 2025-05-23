@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {postUser} from "../../comunication/FetchUser";
+import ReCAPTCHA from "react-google-recaptcha";
 
 /**
  * RegisterUser
@@ -19,6 +20,8 @@ function RegisterUser({loginValues, setLoginValues}) {
     };
     const [credentials, setCredentials] = useState(initialState);
     const [errorMessage, setErrorMessage] = useState('');
+    const [recaptchaValue, setRecaptchaValue] = useState(null);
+    const recaptchaRef = useState(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -31,8 +34,21 @@ function RegisterUser({loginValues, setLoginValues}) {
             return;
         }
 
+        // Check if reCAPTCHA is completed
+        if (!recaptchaValue) {
+            setErrorMessage("Please complete the reCAPTCHA.");
+            return;
+        }
+
         try {
-            await postUser(credentials);
+            const userData = {
+                firstName: credentials.firstName,
+                lastName: credentials.lastName,
+                email: credentials.email,
+                password: credentials.password,
+                recaptchaToken: recaptchaValue // Include reCAPTCHA token
+            };
+            await postUser(userData);
             setLoginValues({userName: credentials.email, password: credentials.password});
             setCredentials(initialState);
             navigate('/');
@@ -40,6 +56,10 @@ function RegisterUser({loginValues, setLoginValues}) {
             console.error('Failed to fetch to server:', error.message);
             setErrorMessage(error.message);
         }
+    };
+
+    const handleRecaptchaChange = (value) => {
+        setRecaptchaValue(value);
     };
 
     return (
@@ -107,8 +127,13 @@ function RegisterUser({loginValues, setLoginValues}) {
                         </div>
                     </aside>
                 </section>
+                {errorMessage && <p className="error-message">{errorMessage}</p>}
+                <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY} // Read from environment variable
+                    onChange={handleRecaptchaChange}
+                />
                 <button type="submit">Register</button>
-                {errorMessage && <p style={{ color: 'red' }}>{errorMessage}</p>}
             </form>
         </div>
     );
