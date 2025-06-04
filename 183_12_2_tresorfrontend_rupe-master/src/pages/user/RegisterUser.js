@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {postUser} from "../../comunication/FetchUser";
 import ReCAPTCHA from "react-google-recaptcha";
@@ -21,7 +21,7 @@ function RegisterUser({loginValues, setLoginValues}) {
     const [credentials, setCredentials] = useState(initialState);
     const [errorMessage, setErrorMessage] = useState('');
     const [recaptchaValue, setRecaptchaValue] = useState(null);
-    const recaptchaRef = useState(null);
+    const recaptchaRef = useRef(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -46,7 +46,8 @@ function RegisterUser({loginValues, setLoginValues}) {
                 lastName: credentials.lastName,
                 email: credentials.email,
                 password: credentials.password,
-                recaptchaToken: recaptchaValue // Include reCAPTCHA token
+                passwordConfirmation: credentials.passwordConfirmation,
+                recaptchaToken: recaptchaValue
             };
             await postUser(userData);
             setLoginValues({userName: credentials.email, password: credentials.password});
@@ -130,7 +131,7 @@ function RegisterUser({loginValues, setLoginValues}) {
                 {errorMessage && <p className="error-message">{errorMessage}</p>}
                 <ReCAPTCHA
                     ref={recaptchaRef}
-                    sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY} // Read from environment variable
+                    sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
                     onChange={handleRecaptchaChange}
                 />
                 <button type="submit">Register</button>

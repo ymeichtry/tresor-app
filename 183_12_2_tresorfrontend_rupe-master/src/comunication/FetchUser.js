@@ -48,13 +48,7 @@ export const postUser = async (content) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                firstName: `${content.firstName}`,
-                lastName: `${content.lastName}`,
-                email: `${content.email}`,
-                password: `${content.password}`,
-                passwordConfirmation: `${content.passwordConfirmation}`
-            })
+            body: JSON.stringify(content)
         });
 
         if (!response.ok) {
