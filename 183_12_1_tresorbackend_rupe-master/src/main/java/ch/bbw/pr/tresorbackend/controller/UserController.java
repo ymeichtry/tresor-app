@@ -90,7 +90,13 @@ public class UserController {
       System.out.println("UserController.createUser: captcha passed.");
 
       //password validation
-      //todo ergänzen
+      if (!isStrongPassword(registerUser.getPassword())) {
+         JsonObject obj = new JsonObject();
+         obj.addProperty("message", "Password is not strong enough.");
+         String json = new Gson().toJson(obj);
+         System.out.println("UserController.createUser, password validation failed: " + json);
+         return ResponseEntity.badRequest().body(json);
+      }
       System.out.println("UserController.createUser, password validation passed");
 
       //transform registerUser to user
@@ -222,20 +228,39 @@ public class UserController {
 
     private boolean verifyRecaptcha(String recaptchaToken) {
         if (recaptchaToken == null || recaptchaToken.isEmpty()) {
+            logger.error("reCAPTCHA token is null or empty");
+            return false;
+        }
+
+        if (recaptchaSecretKey == null || recaptchaSecretKey.isEmpty()) {
+            logger.error("reCAPTCHA secret key is not configured");
             return false;
         }
 
         RestTemplate restTemplate = new RestTemplate();
         String verificationUrl = RECAPTCHA_VERIFY_URL + "?secret=" + recaptchaSecretKey + "&response=" + recaptchaToken;
+        logger.debug("Verifying reCAPTCHA with URL: {}", verificationUrl);
 
         try {
             // The response from Google is a JSON object
             RecaptchaResponse recaptchaResponse = restTemplate.postForObject(
                     verificationUrl, null, RecaptchaResponse.class);
 
-            return recaptchaResponse != null && recaptchaResponse.isSuccess();
+            if (recaptchaResponse == null) {
+                logger.error("reCAPTCHA verification returned null response");
+                return false;
+            }
+
+            if (!recaptchaResponse.isSuccess()) {
+                logger.error("reCAPTCHA verification failed with errors: {}", 
+                    recaptchaResponse.getErrorCodes());
+                return false;
+            }
+
+            logger.info("reCAPTCHA verification successful");
+            return true;
         } catch (Exception e) {
-            logger.error("reCAPTCHA verification error: {}", e.getMessage());
+            logger.error("reCAPTCHA verification error: {}", e.getMessage(), e);
             return false;
         }
     }
@@ -261,5 +286,34 @@ public class UserController {
             this.errorCodes = errorCodes;
         }
     }
+
+   // Helper method for password strength validation
+   private boolean isStrongPassword(String password) {
+      // Minimum 8 characters, at least one uppercase letter, one number, and one special character
+      return password != null && password.matches("^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\\-={}:;\"',.<>/?]).{8,}$");
+   }
+
+   // Build Password Reset REST API
+   @CrossOrigin(origins = "${CROSS_ORIGIN}")
+   @PostMapping("/resetpassword")
+   public ResponseEntity<String> resetPassword(@RequestBody EmailAdress email) {
+       try {
+           User user = userService.findByEmail(email.getEmail());
+           if (user == null) {
+               return ResponseEntity.badRequest().body("No user found with this email");
+           }
+           // In a real application, you would send an email with a reset link.
+           // For this exercise, we'll just reset to a temporary password.
+           String newPassword = "Temp1234!"; // Or generate a random, secure one
+           user.setPassword(passwordService.hashPassword(newPassword));
+           userService.updateUser(user);
+           // Log the new password for demonstration purposes (REMOVE IN PRODUCTION)
+           logger.warn("Password reset for user {}. New password: {}", user.getEmail(), newPassword);
+           return ResponseEntity.ok("Password reset successfully. Please log in with the temporary password and change it.");
+       } catch (Exception e) {
+           logger.error("Error resetting password for email {}: {}", email.getEmail(), e.getMessage());
+           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error resetting password.");
+       }
+   }
 
 }

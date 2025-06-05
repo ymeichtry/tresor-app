@@ -34,6 +34,11 @@ function RegisterUser({loginValues, setLoginValues}) {
             return;
         }
 
+        if (!isStrongPassword(credentials.password)) {
+            setErrorMessage("Password is not strong enough! (at least 8 characters, 1 uppercase letter, 1 number, 1 special character)");
+            return;
+        }
+
         // Check if reCAPTCHA is completed
         if (!recaptchaValue) {
             setErrorMessage("Please complete the reCAPTCHA.");
@@ -62,6 +67,10 @@ function RegisterUser({loginValues, setLoginValues}) {
     const handleRecaptchaChange = (value) => {
         setRecaptchaValue(value);
     };
+
+    function isStrongPassword(pw) {
+        return /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/.test(pw);
+    }
 
     return (
         <div>
