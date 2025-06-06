@@ -25,6 +25,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +48,9 @@ public class UserController {
    @Value("${RECAPTCHA_SECRET_KEY}") // Read from environment variable
    private String recaptchaSecretKey;
    private final String RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
+
+   // In-memory storage for reset tokens (replace with database in production)
+   private Map<String, PasswordResetToken> resetTokens = new HashMap<>();
 
    @Autowired
    public UserController(ConfigProperties configProperties, UserService userService,
@@ -290,30 +298,97 @@ public class UserController {
    // Helper method for password strength validation
    private boolean isStrongPassword(String password) {
       // Minimum 8 characters, at least one uppercase letter, one number, and one special character
-      return password != null && password.matches("^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\\-={}:;\"',.<>/?]).{8,}$");
+      return password != null && password.matches("^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\\-={}:;\"\',.<>/?]).{8,}$");
    }
 
-   // Build Password Reset REST API
-   @CrossOrigin(origins = "${CROSS_ORIGIN}")
-   @PostMapping("/resetpassword")
-   public ResponseEntity<String> resetPassword(@RequestBody EmailAdress email) {
-       try {
-           User user = userService.findByEmail(email.getEmail());
-           if (user == null) {
-               return ResponseEntity.badRequest().body("No user found with this email");
-           }
-           // In a real application, you would send an email with a reset link.
-           // For this exercise, we'll just reset to a temporary password.
-           String newPassword = "Temp1234!"; // Or generate a random, secure one
-           user.setPassword(passwordService.hashPassword(newPassword));
-           userService.updateUser(user);
-           // Log the new password for demonstration purposes (REMOVE IN PRODUCTION)
-           logger.warn("Password reset for user {}. New password: {}", user.getEmail(), newPassword);
-           return ResponseEntity.ok("Password reset successfully. Please log in with the temporary password and change it.");
-       } catch (Exception e) {
-           logger.error("Error resetting password for email {}: {}", email.getEmail(), e.getMessage());
-           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error resetting password.");
-       }
-   }
+    // --- Token-based Password Reset Endpoints ---
+
+    // Represents a password reset token (in-memory for simplicity)
+    private static class PasswordResetToken {
+        private String token;
+        private Long userId;
+        private Date expiryDate;
+
+        public PasswordResetToken(String token, Long userId, Date expiryDate) {
+            this.token = token;
+            this.userId = userId;
+            this.expiryDate = expiryDate;
+        }
+
+        public String getToken() { return token; }
+        public Long getUserId() { return userId; }
+        public Date getExpiryDate() { return expiryDate; }
+
+        public boolean isExpired() {
+            return new Date().after(expiryDate);
+        }
+    }
+
+    // Request password reset (generate token and simulate email send)
+    @CrossOrigin(origins = "${CROSS_ORIGIN}")
+    @PostMapping("/request-password-reset")
+    public ResponseEntity<String> requestPasswordReset(@RequestBody EmailAdress email) {
+        try {
+            User user = userService.findByEmail(email.getEmail());
+            if (user == null) {
+                // Return a generic success message to prevent email enumeration
+                return ResponseEntity.ok("If an account with that email exists, a password reset link has been sent.");
+            }
+
+            String token = UUID.randomUUID().toString();
+            Date expiryDate = new Date(System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)); // Token valid for 1 hour
+
+            // Store token in memory (replace with database storage in production)
+            resetTokens.put(token, new PasswordResetToken(token, user.getId(), expiryDate));
+
+            // Simulate sending email (log the link instead)
+            String resetLink = "${FRONTEND_URL}/reset-password?token=" + token;
+            logger.info("Password Reset Link for {}: {}", user.getEmail(), resetLink);
+
+            return ResponseEntity.ok("If an account with that email exists, a password reset link has been sent.");
+
+        } catch (Exception e) {
+            logger.error("Error requesting password reset for email {}: {}", email.getEmail(), e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error requesting password reset.");
+        }
+    }
+
+    // Reset password with token
+    @CrossOrigin(origins = "${CROSS_ORIGIN}")
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPasswordWithToken(@RequestParam("token") String token, @RequestBody LoginUser loginUser) {
+        try {
+            PasswordResetToken resetToken = resetTokens.get(token);
+
+            if (resetToken == null || resetToken.isExpired()) {
+                return ResponseEntity.badRequest().body("Invalid or expired token.");
+            }
+
+            User user = userService.getUserById(resetToken.getUserId());
+            if (user == null) {
+                 // Should not happen if token is valid and linked to a user ID, but good check
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found.");
+            }
+
+            // Basic password strength validation for the new password
+             if (!isStrongPassword(loginUser.getPassword())) {
+                 return ResponseEntity.badRequest().body("New password is not strong enough.");
+             }
+
+            // Reset the password
+            user.setPassword(passwordService.hashPassword(loginUser.getPassword()));
+            userService.updateUser(user);
+
+            // Invalidate the token (remove from map)
+            resetTokens.remove(token);
+
+            logger.info("Password successfully reset for user {}", user.getEmail());
+            return ResponseEntity.ok("Password has been reset successfully.");
+
+        } catch (Exception e) {
+            logger.error("Error resetting password with token: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error resetting password.");
+        }
+    }
 
 }
